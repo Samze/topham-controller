@@ -2,8 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"io/ioutil"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -33,17 +31,12 @@ func NewServicesController(client osb.Client, store Store) *ServicesController {
 func (s *ServicesController) ProvisionHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
-	defer r.Body.Close()
-	b, err := ioutil.ReadAll(r.Body)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	details := brokerapi.ProvisionDetails{}
-	err = json.Unmarshal(b, &details)
+	err := json.NewDecoder(r.Body).Decode(&details)
+
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, "Error parsing provision request", http.StatusBadRequest)
+		return
 	}
 
 	name := vars["name"]
@@ -58,17 +51,20 @@ func (s *ServicesController) ProvisionHandler(w http.ResponseWriter, r *http.Req
 
 	provisionResponse, err := s.client.ProvisionInstance(&preq)
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = s.store.CreateServiceInstance(name, details.ServiceID, details.PlanID)
-	if err != nil {
-		log.Fatal(err)
+		http.Error(w, "Broker error:"+err.Error(), http.StatusBadGateway)
+		return
 	}
 
 	resp, err := json.Marshal(provisionResponse)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, "Broker error:"+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	err = s.store.CreateServiceInstance(name, details.ServiceID, details.PlanID)
+	if err != nil {
+		http.Error(w, "Failed to save:"+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Write(resp)
@@ -77,7 +73,8 @@ func (s *ServicesController) ProvisionHandler(w http.ResponseWriter, r *http.Req
 func (s *ServicesController) CatalogHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := json.Marshal(s.store.GetCatalog())
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Write(resp)
@@ -87,7 +84,7 @@ func (s *ServicesController) ListInstancesHandler(w http.ResponseWriter, r *http
 	instances := s.store.ListServiceInstances()
 	bytes, err := json.Marshal(instances)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
 	w.Write(bytes)
