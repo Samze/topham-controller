@@ -42,14 +42,16 @@ func (s *ServicesController) ProvisionHandler(w http.ResponseWriter, r *http.Req
 	name := vars["name"]
 
 	preq := osb.ProvisionRequest{
-		InstanceID:       name,
-		ServiceID:        details.ServiceID,
-		PlanID:           details.PlanID,
-		OrganizationGUID: "dummy-org-id",
-		SpaceGUID:        "dummy-space-id",
+		InstanceID:        name,
+		ServiceID:         details.ServiceID,
+		PlanID:            details.PlanID,
+		OrganizationGUID:  "dummy-org-id",
+		SpaceGUID:         "dummy-space-id",
+		AcceptsIncomplete: true,
 	}
 
 	provisionResponse, err := s.client.ProvisionInstance(&preq)
+
 	if err != nil {
 		http.Error(w, "Broker error:"+err.Error(), http.StatusBadGateway)
 		return
@@ -67,6 +69,10 @@ func (s *ServicesController) ProvisionHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if provisionResponse.Async {
+		w.WriteHeader(202)
+	}
+
 	w.Write(resp)
 }
 
@@ -78,6 +84,28 @@ func (s *ServicesController) CatalogHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Write(resp)
+}
+
+func (s *ServicesController) LastOperation(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	req := osb.LastOperationRequest{
+		InstanceID: vars["name"],
+	}
+
+	resp, err := s.client.PollLastOperation(&req)
+	if err != nil {
+		http.Error(w, "Broker error:"+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	bytes, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "Error parsing last operation response", http.StatusBadGateway)
+		return
+	}
+
+	w.Write(bytes)
 }
 
 func (s *ServicesController) ListInstancesHandler(w http.ResponseWriter, r *http.Request) {

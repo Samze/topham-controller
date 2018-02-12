@@ -19,8 +19,6 @@ var password = os.Getenv("BROKER_PASSWORD")
 var instancesStore *store.Store
 
 func main() {
-	r := mux.NewRouter()
-
 	brokerClient := getBrokerClient()
 
 	catalog, err := brokerClient.GetCatalog()
@@ -32,8 +30,10 @@ func main() {
 
 	ctrl := api.NewServicesController(brokerClient, instancesStore)
 
+	r := mux.NewRouter()
 	r.HandleFunc("/v2/catalog", ctrl.CatalogHandler)
 	r.HandleFunc("/v2/service_instances/{name}", ctrl.ProvisionHandler)
+	r.HandleFunc("/v2/service_instances/{name}/last_operation", ctrl.LastOperation)
 	r.HandleFunc("/v2/service_instances", ctrl.ListInstancesHandler)
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
